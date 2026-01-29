@@ -102,3 +102,47 @@ class RAGEngine:
         )
         
         return rag_chain.invoke(question)
+
+    def extract_risk_analysis(self):
+        """Extracts structured risk data (faster and more precise than chat)."""
+        if not self.retriever:
+            return "Please ingest a document first."
+            
+        # Select LLM
+        if self.provider == "Google Gemini":
+            llm = ChatGoogleGenerativeAI(model=self.model_name, google_api_key=self.api_key, temperature=0)
+        elif self.provider == "OpenRouter":
+             llm = ChatOpenAI(
+                 model_name=self.model_name,
+                 openai_api_key=self.api_key,
+                 openai_api_base="https://openrouter.ai/api/v1",
+                 temperature=0
+             )
+        else:
+             llm = ChatOpenAI(model_name=self.model_name, openai_api_key=self.api_key, temperature=0, model_kwargs={"response_format": {"type": "json_object"}})
+        
+        # Specialized Prompt for Extraction
+        template = """You are a legal AI auditor. Your job is to extract risk metadata from the contract context below.
+        Return a valid JSON object with exactly these keys: "indemnification", "termination", "liability_cap".
+        For each key, provide a brief summary of the clause and a "risk_level" (Low/Medium/High).
+        
+        Context:
+        {context}
+        
+        JSON Output:
+        """
+        
+        prompt = ChatPromptTemplate.from_template(template)
+        
+        # Chain
+        def format_docs(docs):
+            return "\n\n".join([d.page_content for d in docs])
+            
+        extraction_chain = (
+            {"context": self.retriever | format_docs}
+            | prompt
+            | llm
+            | StrOutputParser()
+        )
+        
+        return extraction_chain.invoke({})

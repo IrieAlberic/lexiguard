@@ -6,6 +6,16 @@ from contract_manager import ContractManager
 # Page Config
 st.set_page_config(page_title="LexiGuard 3.0", layout="wide")
 
+# Custom CSS to reduce top spacing and align with sidebar toggle
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # Load variables
 init_env()
 
@@ -83,10 +93,10 @@ else:
 
     st.success(f"Active Document: {uploaded_file.name}")
     
-    # Tabs
-    tab1, tab2 = st.tabs(["Chat Assistant", "Risk Analysis"])
+    # Create side-by-side columns (Split View)
+    col1, col2 = st.columns(2, gap="large")
     
-    with tab1:
+    with col1:
         st.subheader("Chat with your Contract")
         
         # Chat History
@@ -109,12 +119,31 @@ else:
                     st.session_state.messages.append({"role": "assistant", "content": response})
                 else:
                     st.error("Engine not initialized.")
-        
-    with tab2:
+    
         st.subheader("Risk & Clause Extraction")
-        if st.button("Analyze Risks"):
+        st.info("Click below to identify potential risks in the document.")
+        
+        if st.button("Analyze Risks", type="primary", use_container_width=True):
             if st.session_state.rag_engine:
-                with st.spinner("Analyzing risks..."):
-                    risks = st.session_state.rag_engine.chat("Identify high-risk clauses in this contract, specifically Indemnification, Termination, and Liability Caps. Format as a markdown list.")
-                    st.markdown(risks)
+                with st.spinner("running deep analysis (JSON Extraction)..."):
+                    try:
+                        # Call optimized extraction method
+                        raw_json = st.session_state.rag_engine.extract_risk_analysis()
+                        
+                        # Parse JSON (cleaning markdown code blocks if present)
+                        import json
+                        cleaned_json = raw_json.replace("```json", "").replace("```", "").strip()
+                        data = json.loads(cleaned_json)
+                        
+                        # Display nicely
+                        for category, details in data.items():
+                            risk_color = "red" if details.get("risk_level") == "High" else "orange" if details.get("risk_level") == "Medium" else "green"
+                            with st.expander(f"{category.replace('_', ' ').title()} (Risk: :{risk_color}[{details.get('risk_level')}])"):
+                                st.write(details.get("summary") or details.get("description"))
+                                
+                    except Exception as e:
+                        st.error(f"Analysis failed: {str(e)}")
+                        st.text(raw_json) # Debug
+            else:
+                 st.error("Please upload a document first.")
 
